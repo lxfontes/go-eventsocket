@@ -10,120 +10,141 @@ import (
 	"time"
 )
 
-func CreateClient(address string, password string, handler FSHandler, timeout time.Duration) (*FSListener, error) {
-	var retClient = new(FSListener)
-	retClient.Address = address
-	retClient.ClientMode = true
-	retClient.Handler = handler
-	retClient.Password = password
-	retClient.Timeout = timeout
+func CreateClient(settings *ClientSettings) (*Client, error) {
+	retClient := new(Client)
+	retClient.Settings = settings
+	retClient.executeChan = make(chan Event)
+	retClient.apiChan = make(chan Event)
+	go retClient.Loop()
 	return retClient, nil
 }
 
-func (conn *FSConnection) tryConnect() {
-	//check if we should connect
-	canConnect := conn.Listener.Handler.CreateConnection(conn)
+func (client *Client) Close() {
+	if client.Reconnects > 0 {
+
+	}
+}
+
+func (client *Client) tryConnect() {
 	var err error
+	client.Connection, err = net.DialTimeout("tcp", client.Settings.Address, client.Settings.Timeout)
 
-	if canConnect {
-		conn.Connection, err = net.DialTimeout("tcp", conn.Listener.Address, conn.Listener.Timeout)
-
-		if err != nil {
-			time.Sleep(conn.Listener.Timeout)
-			return
-		}
-
-	} else {
-		// handler denied connection, just wait
-		time.Sleep(conn.Listener.Timeout)
+	if err != nil {
+		time.Sleep(client.Settings.Timeout)
 		return
 	}
 
 	//Got connection, initiate authentication
-	conn.rw = bufio.NewReadWriter(
-		bufio.NewReader(conn.Connection),
-		bufio.NewWriter(conn.Connection))
+	client.rw = bufio.NewReadWriter(
+		bufio.NewReader(client.Connection),
+		bufio.NewWriter(client.Connection))
 
 	//wait for authentication request
-	auth := conn.ReadMessage()
-
-	if auth.Type != RequestAuthentication {
+	auth := readMessage(client.rw)
+	if auth.Type() != EventAuth {
 		//invalid handshake
 		return
 	}
 
 	//send password
 	pwBuf := bytes.NewBufferString("auth ")
-	pwBuf.WriteString(conn.Listener.Password)
+	pwBuf.WriteString(client.Settings.Password)
 	pwBuf.WriteString("\n\n")
-	conn.rw.Write(pwBuf.Bytes())
-	err = conn.rw.Flush()
+	client.rw.Write(pwBuf.Bytes())
+	err = client.rw.Flush()
 
 	if err != nil {
-		conn.Connection.Close()
+		client.Connection.Close()
 		return
 	}
 
-	authResp := conn.ReadMessage()
+	authResp := readMessage(client.rw)
 
-	if authResp.Type != CommandReply {
-		conn.Connection.Close()
+	if authResp.Type() != EventReply {
+		client.Connection.Close()
 		return
 	}
 
-	if !authResp.Success {
-		conn.Connection.Close()
+	if !authResp.Success() {
+		client.Connection.Close()
 		return
 	}
 
-	conn.Connected = true
-	conn.Listener.Handler.ConnectionAccepted(conn)
+	//connected and authed
+	client.Connected = true
+	client.Reconnects += 1
+	if client.Settings.EventsChannel != nil {
+		client.Settings.EventsChannel <- connectionState{connected: true}
+	}
 }
 
 // Loop communicates with main process via Handler's message channel
 // To be called after authentication or new connection
-func (listener *FSListener) loopClient() {
-	var fscon = new(FSConnection)
-	fscon.Listener = listener
-
+func (client *Client) Loop() {
 	for {
-
-		// Handles reconnect as needed
-		if !fscon.Connected {
-			fscon.tryConnect()
+		if !client.Connected {
+			client.tryConnect()
 			continue
 		}
 
-		message := fscon.ReadMessage()
-		if message.Type == ParserError {
+		message := readMessage(client.rw)
+
+		switch message.Type() {
+		case EventError:
 			//disconnect
-			fscon.Connection.Close()
-			fscon.Connected = false
-			listener.Handler.CloseConnection(fscon)
-		} else {
-			listener.Handler.HandleEvent(fscon, message)
+			client.Connection.Close()
+			client.Connected = false
+			if client.Settings.EventsChannel != nil {
+				client.Settings.EventsChannel <- connectionState{connected: false}
+			}
+		case EventReply:
+			client.executeChan <- message
+		case EventGeneric:
+			client.Settings.EventsChannel <- message
+		case EventApi:
+			client.apiChan <- message
 		}
 
 	}
-
 }
 
-func (listener *FSListener) loopServer() {
+func (client *Client) Api(cmd *Command) (Event, error) {
+	client.lock.Lock()
+	defer client.lock.Unlock()
 
+	sendBytes(client.rw, cmd.GetSend())
+	evt := <-client.apiChan
+
+	return evt, nil
 }
 
-func (listener *FSListener) Loop() {
-	if listener.ClientMode {
-		listener.loopClient()
-	} else {
-		listener.loopServer()
+func (client *Client) Subscribe(evt string) (Event, error) {
+	client.lock.Lock()
+	defer client.lock.Unlock()
+	cmd := Command{
+		App:  "eventplain",
+		Args: evt,
 	}
+	sendBytes(client.rw, cmd.GetSend())
+	ret := <-client.executeChan
+
+	return ret, nil
 }
 
-// ReadMessage blocks until a message is available
-func (connection *FSConnection) ReadMessage() *FSMessage {
+func (client *Client) Execute(cmd *Command) (Event, error) {
+	client.lock.Lock()
+	defer client.lock.Unlock()
+
+	sendBytes(client.rw, cmd.GetExecute())
+	evt := <-client.executeChan
+
+	return evt, nil
+}
+
+// readMessage blocks until a message is available
+func readMessage(rw *bufio.ReadWriter) Event {
 	for {
-		headerReady, err := seeUpcomingHeader(connection.rw.Reader)
+		headerReady, err := seeUpcomingHeader(rw.Reader)
 
 		if err != nil {
 			break
@@ -131,20 +152,14 @@ func (connection *FSConnection) ReadMessage() *FSMessage {
 
 		if headerReady {
 			//good to parse
-			message := parseMessage(connection.rw.Reader)
+			message := parseMessage(rw.Reader)
 			return message
 		}
 	}
-	return new(FSMessage)
+	return new(eventReply)
 }
 
-func (connection *FSConnection) send(b []byte) (int, error) {
-	defer connection.rw.Flush()
-	return connection.rw.Write(b)
-}
-
-// Message Handling
-
-func (msg *FSMessage) String() string {
-	return "mymessage"
+func sendBytes(rw *bufio.ReadWriter, b []byte) (int, error) {
+	defer rw.Flush()
+	return rw.Write(b)
 }

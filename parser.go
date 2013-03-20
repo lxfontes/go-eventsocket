@@ -33,56 +33,58 @@ func seeUpcomingHeader(r *bufio.Reader) (bool, error) {
 
 // Only PLAIN events supported at the moment
 // They can be easily converted to json using encoding/json
-func parseMessage(r *bufio.Reader) *FSMessage {
+func parseMessage(r *bufio.Reader) Event {
 	var err error
-	var retMsg = new(FSMessage)
-	retMsg.Headers, err = textproto.NewReader(r).ReadMIMEHeader()
+
+	retMsg := new(eventReply)
+	retMsg.headers, err = textproto.NewReader(r).ReadMIMEHeader()
 	if err != nil {
-		retMsg.Type = ParserError
+		retMsg.realType = EventError
 		return retMsg
 	}
 
-	ctype := retMsg.Headers.Get("Content-Type")
-	switch ctype {
-	case "auth/request":
-		retMsg.Type = RequestAuthentication
-	case "command/reply":
-		retMsg.Type = CommandReply
-	case "text/event-plain":
-		retMsg.Type = EventPlain
-	case "text/disconnect-notice":
-		retMsg.Type = DisconnectNotice
-	}
-
-	replyText := retMsg.Headers.Get("Reply-Text")
-
-	if strings.Contains(replyText, "+OK") {
-		retMsg.Success = true
-	}
-
-	bodyLenStr := retMsg.Headers.Get("Content-Length")
+	bodyLenStr := retMsg.Headers().Get("Content-Length")
 
 	if bodyLenStr != "" {
 		//has body, go parse it
+
 		bodyLen, err := strconv.Atoi(bodyLenStr)
 		//content length with invalid size
 		if err != nil {
 			log.Printf("Failed to convert body")
-			retMsg.Success = false
+			retMsg.success = false
 			return retMsg
 		}
-		log.Printf("Bodylen %d", bodyLen)
 
-		bodyb, err := seeUpcomingHeader(r)
-		if !bodyb {
-			retMsg.Success = false
+		retMsg.body = make([]byte, bodyLen)
+
+		read, err := r.Read(retMsg.body)
+
+		if err != nil || read != bodyLen {
+			retMsg.success = false
 			return retMsg
-		} else {
-			retMsg.Body, err = textproto.NewReader(r).ReadMIMEHeader()
-			if err != nil {
-				retMsg.Success = false
-				return retMsg
-			}
+		}
+	}
+
+	ctype := retMsg.Headers().Get("Content-Type")
+	switch ctype {
+	case "auth/request":
+		retMsg.realType = EventAuth
+	case "command/reply":
+		retMsg.realType = EventReply
+		replyText := retMsg.Headers().Get("Reply-Text")
+		if strings.Contains(replyText, "+OK") {
+			retMsg.success = true
+		}
+	case "text/event-plain", "text/event-json", "text/event-xml":
+		retMsg.realType = EventGeneric
+	case "text/disconnect-notice":
+		retMsg.realType = EventDisconnect
+	case "api/response":
+		retMsg.realType = EventApi
+		replyText := string(retMsg.Body())
+		if strings.Contains(replyText, "+OK") {
+			retMsg.success = true
 		}
 	}
 
