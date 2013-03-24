@@ -9,25 +9,47 @@ import (
 	"time"
 )
 
+const BufferSize = 16 * 1024
+
 type ClientSettings struct {
-	Address       string
-	Reconnect     bool
-	Timeout       time.Duration
-	Password      string
-	EventsChannel chan Event
+	Address  string
+	Timeout  time.Duration
+	Password string
 }
 
 type Client struct {
-	Settings   *ClientSettings
-	Reconnects int
-	Connected  bool
-	Connection net.Conn
-	rw         *bufio.ReadWriter
+	Settings      *ClientSettings
+	EventsChannel chan *Event
+	Reconnects    int
+	connection
+}
 
+//Non exported struct, gets exposed via composition
+type connection struct {
+	//available while in Server Mode
+	ChannelData textproto.MIMEHeader
+	//true if freeswitch is still able to receive commands (ex: prior disconnect notice)
+	Connected bool
+	eslCon    net.Conn
+	rw        *bufio.ReadWriter
+	lock      sync.Mutex
 	//channels for internal communication
-	executeChan chan Event
-	apiChan     chan Event
-	lock        sync.Mutex
+	apiChan chan *Event
+}
+
+type ServerSettings struct {
+	Address string
+}
+
+type ServerConnection struct {
+	connection
+	Server *Server
+}
+
+type Server struct {
+	Settings      *ServerSettings
+	EventsChannel chan *Event
+	Listener      net.Listener
 }
 
 type Command struct {
@@ -37,85 +59,38 @@ type Command struct {
 	Args string
 }
 
+type JsonBody map[string]string
+
+// EventType indicates how/why this event is being raised
 type EventType int
 
 const (
+	//Parser and Socket errors
 	EventError EventType = iota
+	//Client Mode: Connection established / terminated
+	//Server Mode: New connection / Lost connection
 	EventState
+	//Library internal, used during auth phase
 	EventAuth
+	//Command Reply
 	EventReply
+	//API (reloadxml,reloadacl) commands
 	EventApi
+	//Received a disconnect notice (linger might still be on)
 	EventDisconnect
+	//Subscribed events
 	EventGeneric
 )
 
-type Event interface {
-	Type() EventType
-	Success() bool
-	Headers() *textproto.MIMEHeader
-	Body() []byte
-	String() string
+type Event struct {
+	Type       EventType
+	Headers    textproto.MIMEHeader
+	Body       []byte
+	Connection *connection
+	Success    bool
 }
 
-type eventReply struct {
-	realType EventType
-	headers  textproto.MIMEHeader
-	body     []byte
-	success  bool
-}
-
-type connectionState struct {
-	connected bool
-}
-
-func (c connectionState) String() string {
-	if c.connected {
-		return "connected"
-	}
-	return "not connected"
-}
-
-func (c connectionState) Success() bool {
-	return c.connected
-}
-
-func (c connectionState) Type() EventType {
-	return EventState
-}
-
-func (c connectionState) Headers() *textproto.MIMEHeader {
-	return nil
-}
-
-func (c connectionState) Body() []byte {
-	return nil
-}
-
-func (e *eventReply) Success() bool {
-	return e.success
-}
-
-func (e *eventReply) Type() EventType {
-	return e.realType
-}
-
-func (e *eventReply) Headers() *textproto.MIMEHeader {
-	return &e.headers
-}
-
-func (e *eventReply) Body() []byte {
-	return e.body
-}
-
-func (e *eventReply) String() string {
-	switch e.realType {
-	case EventError:
-		return "error"
-	}
-	return e.headers.Get("Content-Type")
-
-}
-
+// GetExecute formats a dialplan command to be sent over TCP connection
 func (cmd *Command) GetExecute() []byte {
 	bbuf := bytes.NewBufferString("sendmsg")
 	if len(cmd.Uuid) > 0 {
@@ -141,11 +116,9 @@ func (cmd *Command) GetExecute() []byte {
 	return bbuf.Bytes()
 }
 
-func (cmd *Command) GetSend() []byte {
-	bbuf := bytes.NewBufferString(cmd.App)
+func (evt *Event) String() string {
+	evtype := evt.Headers.Get("Content-Type")
+	bbuf := bytes.NewBufferString(evtype)
 	bbuf.WriteString(" ")
-	bbuf.WriteString(cmd.Args)
-	bbuf.Write(singleLine)
-	bbuf.Write(doubleLine)
-	return bbuf.Bytes()
+	return bbuf.String()
 }
