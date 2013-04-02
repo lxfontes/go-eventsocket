@@ -3,7 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	esl "github.com/nuswit/go-eventsocket"
+	esl "github.com/lxfontes/go-eventsocket"
 	"time"
 )
 
