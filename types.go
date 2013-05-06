@@ -59,7 +59,7 @@ type Command struct {
 	Args string
 }
 
-type JsonBody map[string]string
+type JsonBody map[string]interface{}
 
 // EventType indicates how/why this event is being raised
 type EventType int
