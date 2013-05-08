@@ -41,9 +41,11 @@ func (scon *ServerConnection) loop() {
 		return
 	}
 
-	scon.Server.EventsChannel <- &Event{Success: true, Type: EventState, Connection: &scon.connection}
+	scon.Connection.ChannelData = channelData.Headers
+	scon.Server.EventsChannel <- &Event{Success: true, Type: EventState, Connection: &scon.Connection}
+	scon.Connected = true
 
-	for {
+	for scon.Connected {
 		message := readMessage(scon.rw)
 
 		switch message.Type {
@@ -51,15 +53,17 @@ func (scon *ServerConnection) loop() {
 			//disconnect
 			scon.eslCon.Close()
 			scon.Connected = false
-			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.connection}
+			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.Connection}
 		case EventDisconnect:
 			//disconnect
 			scon.eslCon.Close()
 			scon.Connected = false
-			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.connection}
+			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.Connection}
 		case EventReply, EventApi:
+			message.Connection = &scon.Connection
 			scon.apiChan <- message
 		case EventGeneric:
+			message.Connection = &scon.Connection
 			scon.Server.EventsChannel <- message
 		}
 

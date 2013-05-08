@@ -26,7 +26,7 @@ func (client *Client) tryConnect() {
 		return
 	}
 
-	//Got connection, initiate authentication
+	//Got Connection, initiate authentication
 	client.rw = bufio.NewReadWriter(
 		bufio.NewReaderSize(client.eslCon, BufferSize),
 		bufio.NewWriter(client.eslCon))
@@ -65,11 +65,11 @@ func (client *Client) tryConnect() {
 	//connected and authed
 	client.Connected = true
 	client.Reconnects += 1
-	client.EventsChannel <- &Event{Success: true, Type: EventState, Connection: &client.connection}
+	client.EventsChannel <- &Event{Success: true, Type: EventState, Connection: &client.Connection}
 }
 
 // Loop communicates with main process via Handler's message channel
-// To be called after authentication or new connection
+// To be called after authentication or new Connection
 func (client *Client) loop() {
 	for {
 		if !client.Connected {
@@ -78,19 +78,19 @@ func (client *Client) loop() {
 		}
 
 		message := readMessage(client.rw)
-		message.Connection = &client.connection
+		message.Connection = &client.Connection
 
 		switch message.Type {
 		case EventError:
 			//disconnect
 			client.eslCon.Close()
 			client.Connected = false
-			client.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &client.connection}
+			client.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &client.Connection}
 		case EventDisconnect:
 			//disconnect
 			client.eslCon.Close()
 			client.Connected = false
-			client.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &client.connection}
+			client.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &client.Connection}
 		case EventReply, EventApi:
 			client.apiChan <- message
 		case EventGeneric:

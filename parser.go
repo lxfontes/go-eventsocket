@@ -59,12 +59,21 @@ func parseMessage(r *bufio.Reader) *Event {
 
 		retMsg.Body = make([]byte, bodyLen)
 
+		_, err = r.Peek(bodyLen)
+		if err != nil {
+			retMsg.Success = false
+			return retMsg
+		}
+
 		read, err := r.Read(retMsg.Body)
 
 		if err != nil || read != bodyLen {
 			retMsg.Success = false
 			return retMsg
 		}
+		fmt.Println("bodyLen", err, read, bodyLen, string(retMsg.Body), retMsg.Headers)
+	} else {
+		fmt.Println("NO bodyLen", err, string(retMsg.Body), retMsg.Headers)
 	}
 
 	ctype := retMsg.Headers.Get("Content-Type")
@@ -90,6 +99,8 @@ func parseMessage(r *bufio.Reader) *Event {
 		}
 	}
 
+	fmt.Println("Going to return", retMsg.Type, retMsg.Success)
+
 	return retMsg
 }
 
@@ -102,7 +113,7 @@ func ParseJson(evt *Event) (JsonBody, error) {
 	return data, nil
 }
 
-func (con *connection) Send(cmd string, args ...string) (*Event, error) {
+func (con *Connection) Send(cmd string, args ...string) (*Event, error) {
 	bbuf := bytes.NewBufferString(cmd)
 	for _, item := range args {
 		bbuf.WriteString(" ")
@@ -120,7 +131,7 @@ func (con *connection) Send(cmd string, args ...string) (*Event, error) {
 	return evt, nil
 }
 
-func (con *connection) Event(cmd string, headers map[string]string, body []byte) (*Event, error) {
+func (con *Connection) Event(cmd string, headers map[string]string, body []byte) (*Event, error) {
 	bbuf := bytes.NewBufferString("sendevent ")
 	bbuf.WriteString(cmd)
 	bbuf.Write(singleLine)
@@ -148,7 +159,7 @@ func (con *connection) Event(cmd string, headers map[string]string, body []byte)
 	return evt, nil
 }
 
-func (con *connection) Execute(cmd *Command) (*Event, error) {
+func (con *Connection) Execute(cmd *Command) (*Event, error) {
 	con.lock.Lock()
 	defer con.lock.Unlock()
 

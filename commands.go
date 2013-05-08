@@ -7,7 +7,7 @@ import (
 // TODO: A few helpers to well....'help' sending dialplan commands
 // They block in some situations (ex: ringready), but not others (ex: bridge)
 
-func (con *connection) Answer() (*Event, error) {
+func (con *Connection) Answer() (*Event, error) {
 	cmd := Command{
 		App:  "answer",
 		Lock: true,
@@ -15,7 +15,7 @@ func (con *connection) Answer() (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) VerboseEvents() (*Event, error) {
+func (con *Connection) VerboseEvents() (*Event, error) {
 	cmd := Command{
 		App:  "verbose_events",
 		Lock: true,
@@ -23,7 +23,7 @@ func (con *connection) VerboseEvents() (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) Bridge(endpoint string, lock bool) (*Event, error) {
+func (con *Connection) Bridge(endpoint string, lock bool) (*Event, error) {
 	cmd := Command{
 		App:  "bridge",
 		Args: endpoint,
@@ -32,7 +32,7 @@ func (con *connection) Bridge(endpoint string, lock bool) (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) Hangup(reason string) (*Event, error) {
+func (con *Connection) Hangup(reason string) (*Event, error) {
 	cmd := Command{
 		App:  "hangup",
 		Args: reason,
@@ -41,7 +41,7 @@ func (con *connection) Hangup(reason string) (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) RingReady() (*Event, error) {
+func (con *Connection) RingReady() (*Event, error) {
 	cmd := Command{
 		App:  "ring_ready",
 		Lock: false,
@@ -49,7 +49,7 @@ func (con *connection) RingReady() (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) RecordSession(filename string) (*Event, error) {
+func (con *Connection) RecordSession(filename string) (*Event, error) {
 	cmd := Command{
 		App:  "record_session",
 		Args: filename,
@@ -58,7 +58,7 @@ func (con *connection) RecordSession(filename string) (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) Read(min int, max int, audio string, variable string, timeout int, terminators string) (*Event, error) {
+func (con *Connection) Read(min int, max int, audio string, variable string, timeout int, terminators string) (*Event, error) {
 	args := fmt.Sprint("%d %d %s %s %d %s", min, max, audio, variable, timeout, terminators)
 	cmd := Command{
 		App:  "read",
@@ -68,7 +68,7 @@ func (con *connection) Read(min int, max int, audio string, variable string, tim
 	return con.Execute(&cmd)
 }
 
-func (con *connection) Set(key string, value string) (*Event, error) {
+func (con *Connection) Set(key string, value string) (*Event, error) {
 	args := fmt.Sprint("%s=%s", key, value)
 	cmd := Command{
 		App:  "read",
@@ -78,7 +78,7 @@ func (con *connection) Set(key string, value string) (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) UnSet(key string) (*Event, error) {
+func (con *Connection) UnSet(key string) (*Event, error) {
 
 	cmd := Command{
 		App:  "read",
@@ -88,30 +88,30 @@ func (con *connection) UnSet(key string) (*Event, error) {
 	return con.Execute(&cmd)
 }
 
-func (con *connection) Exit() (*Event, error) {
+func (con *Connection) Exit() (*Event, error) {
 	return con.Send("exit")
 }
 
-func (con *connection) EventPlain(event string) (*Event, error) {
+func (con *Connection) EventPlain(event string) (*Event, error) {
 	return con.Send("event", "plain", event)
 }
 
-func (con *connection) EventJson(event string) (*Event, error) {
+func (con *Connection) EventJson(event string) (*Event, error) {
 	return con.Send("event", "json", event)
 }
 
-func (con *connection) EventXml(event string) (*Event, error) {
+func (con *Connection) EventXml(event string) (*Event, error) {
 	return con.Send("event", "xml", event)
 }
 
-func (con *connection) Linger() (*Event, error) {
+func (con *Connection) Linger() (*Event, error) {
 	return con.Send("linger")
 }
 
-func (con *connection) Filter(key string, value string) (*Event, error) {
+func (con *Connection) Filter(key string, value string) (*Event, error) {
 	return con.Send("filter", key, value)
 }
 
-func (con *connection) FilterDelete(key string, value string) (*Event, error) {
+func (con *Connection) FilterDelete(key string, value string) (*Event, error) {
 	return con.Send("filter", "delete", key, value)
 }

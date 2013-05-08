@@ -21,11 +21,11 @@ type Client struct {
 	Settings      *ClientSettings
 	EventsChannel chan *Event
 	Reconnects    int
-	connection
+	Connection
 }
 
 //Non exported struct, gets exposed via composition
-type connection struct {
+type Connection struct {
 	//available while in Server Mode
 	ChannelData textproto.MIMEHeader
 	//true if freeswitch is still able to receive commands (ex: prior disconnect notice)
@@ -42,7 +42,7 @@ type ServerSettings struct {
 }
 
 type ServerConnection struct {
-	connection
+	Connection
 	Server *Server
 }
 
@@ -68,7 +68,7 @@ const (
 	//Parser and Socket errors
 	EventError EventType = iota
 	//Client Mode: Connection established / terminated
-	//Server Mode: New connection / Lost connection
+	//Server Mode: New Connection / Lost Connection
 	EventState
 	//Library internal, used during auth phase
 	EventAuth
@@ -86,11 +86,11 @@ type Event struct {
 	Type       EventType
 	Headers    textproto.MIMEHeader
 	Body       []byte
-	Connection *connection
+	Connection *Connection
 	Success    bool
 }
 
-// GetExecute formats a dialplan command to be sent over TCP connection
+// GetExecute formats a dialplan command to be sent over TCP Connection
 func (cmd *Command) GetExecute() []byte {
 	bbuf := bytes.NewBufferString("sendmsg")
 	if len(cmd.Uuid) > 0 {
