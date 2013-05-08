@@ -3,7 +3,6 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net"
 )
 
@@ -36,7 +35,6 @@ func (scon *ServerConnection) loop() {
 	channelData := readMessage(scon.rw)
 
 	if channelData.Type != EventReply {
-		fmt.Println("Closing due to", channelData.Type)
 		scon.eslCon.Close()
 		return
 	}

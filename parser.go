@@ -71,9 +71,6 @@ func parseMessage(r *bufio.Reader) *Event {
 			retMsg.Success = false
 			return retMsg
 		}
-		fmt.Println("bodyLen", err, read, bodyLen, string(retMsg.Body), retMsg.Headers)
-	} else {
-		fmt.Println("NO bodyLen", err, string(retMsg.Body), retMsg.Headers)
 	}
 
 	ctype := retMsg.Headers.Get("Content-Type")
@@ -98,8 +95,6 @@ func parseMessage(r *bufio.Reader) *Event {
 			retMsg.Success = true
 		}
 	}
-
-	fmt.Println("Going to return", retMsg.Type, retMsg.Success)
 
 	return retMsg
 }
