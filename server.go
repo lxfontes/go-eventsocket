@@ -20,6 +20,10 @@ func CreateServer(settings *ServerSettings) (*Server, error) {
 	return retServer, nil
 }
 
+func (scon *ServerConnection) Close() {
+	scon.eslCon.Close()
+}
+
 func (scon *ServerConnection) loop() {
 	//authenticate socket
 	cBuf := bytes.NewBufferString("connect")
@@ -54,7 +58,6 @@ func (scon *ServerConnection) loop() {
 			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.Connection}
 		case EventDisconnect:
 			//disconnect
-			scon.eslCon.Close()
 			scon.Connected = false
 			scon.Server.EventsChannel <- &Event{Success: false, Type: EventState, Connection: &scon.Connection}
 		case EventReply, EventApi:

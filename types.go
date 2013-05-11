@@ -27,7 +27,7 @@ type Client struct {
 //Non exported struct, gets exposed via composition
 type Connection struct {
 	//available while in Server Mode
-	ChannelData textproto.MIMEHeader
+	ChannelData ESLkv
 	//true if freeswitch is still able to receive commands (ex: prior disconnect notice)
 	Connected bool
 	eslCon    net.Conn
@@ -60,6 +60,10 @@ type Command struct {
 }
 
 type JsonBody map[string]interface{}
+type ESLkv struct {
+	body         textproto.MIMEHeader
+	shouldEscape bool
+}
 
 // EventType indicates how/why this event is being raised
 type EventType int
@@ -84,9 +88,10 @@ const (
 
 type Event struct {
 	Type       EventType
-	Headers    textproto.MIMEHeader
+	Headers    ESLkv
 	Body       []byte
 	Connection *Connection
+	EventBody  ESLkv
 	Success    bool
 }
 

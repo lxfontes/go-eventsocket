@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -39,7 +40,7 @@ func parseMessage(r *bufio.Reader) *Event {
 	var err error
 
 	retMsg := new(Event)
-	retMsg.Headers, err = textproto.NewReader(r).ReadMIMEHeader()
+	retMsg.Headers.body, err = textproto.NewReader(r).ReadMIMEHeader()
 	if err != nil {
 		retMsg.Type = EventError
 		return retMsg
@@ -84,7 +85,14 @@ func parseMessage(r *bufio.Reader) *Event {
 		if strings.Contains(replyText, "+OK") {
 			retMsg.Success = true
 		}
-	case "text/event-plain", "text/event-json", "text/event-xml":
+		if strings.Contains(replyText, "%") {
+			retMsg.Headers.shouldEscape = true
+		}
+	case "text/event-plain":
+		retMsg.Type = EventGeneric
+		retMsg.EventBody.shouldEscape = true
+		retMsg.parseBody()
+	case "text/event-json", "text/event-xml":
 		retMsg.Type = EventGeneric
 	case "text/disconnect-notice":
 		retMsg.Type = EventDisconnect
@@ -97,6 +105,28 @@ func parseMessage(r *bufio.Reader) *Event {
 	}
 
 	return retMsg
+}
+
+func (evt *Event) parseBody() {
+	var err error
+	evt.EventBody.body, err = textproto.NewReader(bufio.NewReader(bytes.NewBuffer(evt.Body))).ReadMIMEHeader()
+	if err != nil {
+		evt.Success = false
+		return
+	}
+}
+
+func localUnescape(s string) string {
+	x, _ := url.QueryUnescape(s)
+	return x
+}
+
+func (eB *ESLkv) Get(key string) string {
+	s := eB.body.Get(key)
+	if eB.shouldEscape {
+		return localUnescape(s)
+	}
+	return s
 }
 
 func ParseJson(evt *Event) (JsonBody, error) {
