@@ -24,6 +24,7 @@ func (n *Nooper) OnDisconnect(con *Connection) {
 
 func (n *Nooper) OnEvent(con *Connection, evt *Event) {
 	fmt.Println("event", evt.EventBody.Get("Event-Name"))
+	con.Send("quit")
 }
 
 func (n *Nooper) OnClose(con *Connection) {
@@ -43,7 +44,9 @@ func Test_Client(t *testing.T) {
 	if err != nil {
 		fmt.Println("Something went wrong ", err)
 	}
+	if client != nil {
+	}
 
-	client.Loop()
+	//	client.Loop()
 
 }

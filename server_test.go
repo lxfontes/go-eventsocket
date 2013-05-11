@@ -5,33 +5,54 @@ import (
 	"testing"
 )
 
-func Test_Server(t *testing.T) {
-	t.Log("Test Basic Server")
+type ServerNooper struct{}
 
-	server, err := CreateServer(&ServerSettings{
-		Address: "localhost:8086",
+func (n *ServerNooper) OnConnect(con *Connection) {
+	fmt.Println("Connected")
+	evt, err := con.Send("event", "plain", "HEARTBEAT")
+	if err != nil {
+		fmt.Println("ahn?")
+		return
+	}
+	fmt.Println(evt.Success)
+
+	con.Execute(&Command{
+		App:  "answer",
+		Args: "",
+	})
+}
+
+func (n *ServerNooper) OnDisconnect(con *Connection) {
+	fmt.Println("disconnect")
+}
+
+func (n *ServerNooper) OnEvent(con *Connection, evt *Event) {
+	fmt.Println("event", evt.EventBody.Get("Event-Name"))
+}
+
+func (n *ServerNooper) OnClose(con *Connection) {
+	fmt.Println("close")
+}
+
+func (n *ServerNooper) OnNewConnection(con *Connection) {
+	fmt.Println("Got new connection")
+	con.Listener = n
+	go con.Loop()
+}
+
+func Test_Server(t *testing.T) {
+	fmt.Println("Test Basic Server")
+
+	server, err := CreateServer(ServerSettings{
+		Address:  "localhost:8087",
+		Listener: new(ServerNooper),
 	})
 
 	if err != nil {
 		fmt.Println("Something went wrong ", err)
 	}
+	fmt.Println("Listening")
 
-	fmt.Println("Listening on", server.Settings.Address)
-
-	for loop := true; loop; {
-		msg := <-server.EventsChannel
-		switch {
-		case msg.Type == EventState && !msg.Success:
-			fmt.Println("Disconnected")
-			loop = false
-		case msg.Type == EventState && msg.Success:
-			fmt.Println("Connected")
-			fmt.Println("Answering")
-			msg.Connection.Answer()
-
-		case msg.Type == EventGeneric:
-
-		}
-	}
+	server.Loop()
 
 }

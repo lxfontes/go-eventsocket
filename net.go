@@ -3,7 +3,7 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
-	"fmt"
+	_ "fmt"
 	"net"
 	"sync"
 	"time"
@@ -43,7 +43,7 @@ type Connection struct {
 }
 
 type Server struct {
-	Settings    *ServerSettings
+	Settings    ServerSettings
 	NetListener net.Listener
 	EvListener  ServerListener
 }
@@ -91,7 +91,7 @@ func (con *Connection) tryConnect(client *Client) bool {
 	return true
 }
 
-func (con *Connection) setupConnect() {
+func (con *Connection) setupConnect() bool {
 	//authenticate socket
 	cBuf := bytes.NewBufferString("connect")
 	cBuf.Write(doubleLine)
@@ -100,25 +100,25 @@ func (con *Connection) setupConnect() {
 
 	if err != nil {
 		con.eslCon.Close()
-		return
+		return false
 	}
 
 	channelData := readMessage(con.rw)
 
 	if channelData.Type != EventReply {
 		con.eslCon.Close()
-		return
+		return false
 	}
 
 	con.ChannelData = channelData.Headers
 	con.Connected = true
+	return true
 }
 
 func (con *Connection) Loop() {
 	//spin this on a separate goroutine so we can start handling api events
 	//people will likely subscribe to events here
 	go con.Listener.OnConnect(con)
-	fmt.Println("Connection Loop")
 	for con.Connected {
 		message := readMessage(con.rw)
 
@@ -140,12 +140,11 @@ func (con *Connection) Loop() {
 		}
 
 	}
-	fmt.Println("Close Connection Loop")
 }
 
 /* Server */
 
-func CreateServer(settings *ServerSettings) (*Server, error) {
+func CreateServer(settings ServerSettings) (*Server, error) {
 	var err error
 	retServer := new(Server)
 	retServer.Settings = settings
@@ -155,10 +154,9 @@ func CreateServer(settings *ServerSettings) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	go retServer.loop()
 	return retServer, nil
 }
-func (server *Server) loop() {
+func (server *Server) Loop() {
 	for {
 		conn, err := server.NetListener.Accept()
 		if err != nil {
@@ -172,7 +170,9 @@ func (server *Server) loop() {
 		scon.rw = bufio.NewReadWriter(
 			bufio.NewReaderSize(scon.eslCon, BufferSize),
 			bufio.NewWriter(scon.eslCon))
-		server.EvListener.OnNewConnection(scon)
+		if scon.setupConnect() {
+			server.EvListener.OnNewConnection(scon)
+		}
 	}
 }
 
@@ -201,17 +201,13 @@ func CreateClient(settings ClientSettings) (*Client, error) {
 func (client *Client) Loop() {
 	for {
 		if !client.Connected {
-			fmt.Println("Trying to reconnect")
 			client.Connected = client.connection.tryConnect(client)
 			if !client.Connected {
 				time.Sleep(client.Settings.Timeout)
 			}
-			fmt.Println("Finished trying to reconnect", client.Connected)
 			continue
 		}
-		fmt.Println("Client Loop")
 		client.connection.Loop()
-		fmt.Println("Client Loop Finished")
 		client.Connected = false
 	}
 }
