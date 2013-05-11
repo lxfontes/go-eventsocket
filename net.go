@@ -3,6 +3,7 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	_ "fmt"
 	"net"
 	"sync"
@@ -50,6 +51,61 @@ type Server struct {
 
 /* Connection */
 
+func (con *Connection) Send(cmd string, args ...string) (*Event, error) {
+	bbuf := bytes.NewBufferString(cmd)
+	for _, item := range args {
+		bbuf.WriteString(" ")
+		bbuf.WriteString(item)
+	}
+	bbuf.Write(doubleLine)
+
+	//all commands block until FS replies
+	con.lock.Lock()
+	defer con.lock.Unlock()
+
+	sendBytes(con.rw, bbuf.Bytes())
+	evt := <-con.apiChan
+
+	return evt, nil
+}
+
+func (con *Connection) Event(cmd string, headers map[string]string, body []byte) (*Event, error) {
+	bbuf := bytes.NewBufferString("sendevent ")
+	bbuf.WriteString(cmd)
+	bbuf.Write(singleLine)
+
+	for k, v := range headers {
+		bbuf.WriteString(k)
+		bbuf.WriteString(": ")
+		bbuf.WriteString(v)
+		bbuf.Write(singleLine)
+	}
+
+	ll := len(body)
+	lf := fmt.Sprintf("content-length: %d%s", ll, doubleLine)
+	bbuf.WriteString(lf)
+
+	bbuf.Write(body)
+
+	//all commands block until FS replies
+	con.lock.Lock()
+	defer con.lock.Unlock()
+
+	sendBytes(con.rw, bbuf.Bytes())
+	evt := <-con.apiChan
+
+	return evt, nil
+}
+
+func (con *Connection) Execute(cmd *Command) (*Event, error) {
+	con.lock.Lock()
+	defer con.lock.Unlock()
+
+	sendBytes(con.rw, cmd.GetExecute())
+	evt := <-con.apiChan
+
+	return evt, nil
+}
 func (con *Connection) tryConnect(client *Client) bool {
 	var err error
 	con.eslCon, err = net.DialTimeout("tcp", client.Settings.Address, client.Settings.Timeout)
@@ -187,27 +243,27 @@ type ClientSettings struct {
 type Client struct {
 	Settings   ClientSettings
 	Connected  bool
-	connection Connection
+	Connection Connection
 }
 
 func CreateClient(settings ClientSettings) (*Client, error) {
 	retClient := new(Client)
 	retClient.Settings = settings
-	retClient.connection.Listener = settings.Listener
-	retClient.connection.apiChan = make(chan *Event)
+	retClient.Connection.Listener = settings.Listener
+	retClient.Connection.apiChan = make(chan *Event)
 	return retClient, nil
 }
 
 func (client *Client) Loop() {
 	for {
 		if !client.Connected {
-			client.Connected = client.connection.tryConnect(client)
+			client.Connected = client.Connection.tryConnect(client)
 			if !client.Connected {
 				time.Sleep(client.Settings.Timeout)
 			}
 			continue
 		}
-		client.connection.Loop()
+		client.Connection.Loop()
 		client.Connected = false
 	}
 }

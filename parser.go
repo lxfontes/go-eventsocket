@@ -3,7 +3,6 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
-	"fmt"
 	"net/textproto"
 	"net/url"
 	"strconv"
@@ -169,62 +168,6 @@ func (eB *ESLkv) Get(key string) string {
 		return localUnescape(s)
 	}
 	return s
-}
-
-func (con *Connection) Send(cmd string, args ...string) (*Event, error) {
-	bbuf := bytes.NewBufferString(cmd)
-	for _, item := range args {
-		bbuf.WriteString(" ")
-		bbuf.WriteString(item)
-	}
-	bbuf.Write(doubleLine)
-
-	//all commands block until FS replies
-	con.lock.Lock()
-	defer con.lock.Unlock()
-
-	sendBytes(con.rw, bbuf.Bytes())
-	evt := <-con.apiChan
-
-	return evt, nil
-}
-
-func (con *Connection) Event(cmd string, headers map[string]string, body []byte) (*Event, error) {
-	bbuf := bytes.NewBufferString("sendevent ")
-	bbuf.WriteString(cmd)
-	bbuf.Write(singleLine)
-
-	for k, v := range headers {
-		bbuf.WriteString(k)
-		bbuf.WriteString(": ")
-		bbuf.WriteString(v)
-		bbuf.Write(singleLine)
-	}
-
-	ll := len(body)
-	lf := fmt.Sprintf("content-length: %d%s", ll, doubleLine)
-	bbuf.WriteString(lf)
-
-	bbuf.Write(body)
-
-	//all commands block until FS replies
-	con.lock.Lock()
-	defer con.lock.Unlock()
-
-	sendBytes(con.rw, bbuf.Bytes())
-	evt := <-con.apiChan
-
-	return evt, nil
-}
-
-func (con *Connection) Execute(cmd *Command) (*Event, error) {
-	con.lock.Lock()
-	defer con.lock.Unlock()
-
-	sendBytes(con.rw, cmd.GetExecute())
-	evt := <-con.apiChan
-
-	return evt, nil
 }
 
 // readMessage blocks until a message is available
