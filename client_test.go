@@ -6,43 +6,44 @@ import (
 	"time"
 )
 
+type Nooper struct{}
+
+func (n *Nooper) OnConnect(con *Connection) {
+	fmt.Println("Connected")
+	evt, err := con.Send("event", "plain", "HEARTBEAT")
+	if err != nil {
+		fmt.Println("ahn?")
+		return
+	}
+	fmt.Println(evt.Success)
+}
+
+func (n *Nooper) OnDisconnect(con *Connection) {
+	fmt.Println("disconnect")
+}
+
+func (n *Nooper) OnEvent(con *Connection, evt *Event) {
+	fmt.Println("event", evt.EventBody.Get("Event-Name"))
+}
+
+func (n *Nooper) OnClose(con *Connection) {
+	fmt.Println("close")
+}
+
 func Test_Client(t *testing.T) {
 	t.Log("Test Basic Client")
 
-	client, err := CreateClient(&ClientSettings{
+	client, err := CreateClient(ClientSettings{
 		Address:  "localhost:8021",
 		Password: "fongopass",
-		Timeout:  10 * time.Second,
+		Timeout:  1 * time.Second,
+		Listener: new(Nooper),
 	})
 
 	if err != nil {
 		fmt.Println("Something went wrong ", err)
 	}
 
-	disconnecting := false
-	for loop := true; loop; {
-		msg := <-client.EventsChannel
-
-		//For clients, 'client' and 'msg.Connection' will point to the same struct
-		//However, 'client' has a few more fields available
-		switch {
-		case msg.Type == EventState && !msg.Success:
-			fmt.Println("Disconnected")
-			loop = false
-		case msg.Type == EventState && msg.Success:
-			fmt.Println("Connected")
-			resp, err := msg.Connection.Send("event", "json", "RELOADXML")
-			fmt.Println(resp, err)
-			resp, err = msg.Connection.Send("api", "reloadxml")
-
-			fmt.Println(resp, err)
-		case msg.Type == EventGeneric:
-			//get one event and disconnect
-			if !disconnecting {
-				msg.Connection.Send("exit")
-				disconnecting = true
-			}
-		}
-	}
+	client.Loop()
 
 }

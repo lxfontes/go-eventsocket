@@ -3,7 +3,6 @@ package eventsocket
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/textproto"
 	"net/url"
@@ -15,6 +14,49 @@ var (
 	singleLine = []byte("\n")
 	doubleLine = []byte("\n\n")
 )
+
+const BufferSize = 16 * 1024
+
+type Command struct {
+	Lock bool
+	Uuid string
+	App  string
+	Args string
+}
+
+type ESLkv struct {
+	body         textproto.MIMEHeader
+	shouldEscape bool
+}
+
+// EventType indicates how/why this event is being raised
+type EventType int
+
+const (
+	//Parser and Socket errors
+	EventError EventType = iota
+	//Client Mode: Connection established / terminated
+	//Server Mode: New Connection / Lost Connection
+	EventState
+	//Library internal, used during auth phase
+	EventAuth
+	//Command Reply
+	EventReply
+	//API (reloadxml,reloadacl) commands
+	EventApi
+	//Received a disconnect notice (linger might still be on)
+	EventDisconnect
+	//Subscribed events
+	EventGeneric
+)
+
+type Event struct {
+	Type      EventType
+	Headers   ESLkv
+	Body      []byte
+	EventBody ESLkv
+	Success   bool
+}
 
 // Searches for next packet boundary
 // Blocks until we can 'peek' inside the reader
@@ -129,15 +171,6 @@ func (eB *ESLkv) Get(key string) string {
 	return s
 }
 
-func ParseJson(evt *Event) (JsonBody, error) {
-	var data JsonBody
-	err := json.Unmarshal(evt.Body, &data)
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
-}
-
 func (con *Connection) Send(cmd string, args ...string) (*Event, error) {
 	bbuf := bytes.NewBufferString(cmd)
 	for _, item := range args {
@@ -217,4 +250,30 @@ func readMessage(rw *bufio.ReadWriter) *Event {
 func sendBytes(rw *bufio.ReadWriter, b []byte) (int, error) {
 	defer rw.Flush()
 	return rw.Write(b)
+}
+
+// GetExecute formats a dialplan command to be sent over TCP Connection
+func (cmd *Command) GetExecute() []byte {
+	bbuf := bytes.NewBufferString("sendmsg")
+	if len(cmd.Uuid) > 0 {
+		bbuf.WriteString(" ")
+		bbuf.WriteString(cmd.Uuid)
+	}
+	bbuf.Write(singleLine)
+	bbuf.WriteString("call-command: execute")
+	bbuf.Write(singleLine)
+	bbuf.WriteString("execute-app-name: ")
+	bbuf.WriteString(cmd.App)
+	bbuf.Write(singleLine)
+	if len(cmd.Args) > 0 {
+		bbuf.WriteString("execute-app-arg: ")
+		bbuf.WriteString(cmd.Args)
+		bbuf.Write(singleLine)
+	}
+	if cmd.Lock {
+		bbuf.WriteString("event-lock: true")
+		bbuf.Write(singleLine)
+	}
+	bbuf.Write(doubleLine)
+	return bbuf.Bytes()
 }
