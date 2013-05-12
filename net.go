@@ -190,7 +190,6 @@ func (con *Connection) Loop() {
 			con.Close()
 		case EventDisconnect:
 			//disconnect
-			con.Connected = false
 			con.Listener.OnDisconnect(con, message)
 		case EventReply, EventApi:
 			con.apiChan <- message
