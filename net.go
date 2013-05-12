@@ -17,7 +17,7 @@ type ServerListener interface {
 type ConnectionListener interface {
 	OnConnect(con *Connection)
 	OnEvent(con *Connection, evt *Event)
-	OnDisconnect(con *Connection)
+	OnDisconnect(con *Connection, msg *Event)
 	OnClose(con *Connection)
 }
 
@@ -147,6 +147,12 @@ func (con *Connection) tryConnect(client *Client) bool {
 	return true
 }
 
+func (con *Connection) Close() {
+	con.Connected = false
+	con.Listener.OnClose(con)
+	con.eslCon.Close()
+}
+
 func (con *Connection) setupConnect() bool {
 	//authenticate socket
 	cBuf := bytes.NewBufferString("connect")
@@ -181,14 +187,11 @@ func (con *Connection) Loop() {
 		switch message.Type {
 		case EventError:
 			//disconnect
-			con.eslCon.Close()
-			con.Connected = false
-			con.Listener.OnDisconnect(con)
-			con.Listener.OnClose(con)
+			con.Close()
 		case EventDisconnect:
 			//disconnect
 			con.Connected = false
-			con.Listener.OnDisconnect(con)
+			con.Listener.OnDisconnect(con, message)
 		case EventReply, EventApi:
 			con.apiChan <- message
 		case EventGeneric:
