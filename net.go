@@ -148,8 +148,10 @@ func (con *Connection) tryConnect(client *Client) bool {
 }
 
 func (con *Connection) Close() {
-	con.Connected = false
-	con.Listener.OnClose(con)
+	if con.Connected {
+		con.Connected = false
+		con.Listener.OnClose(con)
+	}
 	con.eslCon.Close()
 }
 
